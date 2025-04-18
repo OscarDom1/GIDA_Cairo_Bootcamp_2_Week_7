@@ -54,7 +54,7 @@ export function StarknetProvider({ children }: StarknetProviderProps) {
       chains={[mainnet, sepolia]}
       provider={
         jsonRpcProvider({ rpc: (chain) => ({
-          nodeUrl: process.env.NEXT_PUBLIC_RPC_URL
+          nodeUrl: process.env.NEXT_PUBLIC_API_KEY
         })})
       }
       explorer={starkscan}

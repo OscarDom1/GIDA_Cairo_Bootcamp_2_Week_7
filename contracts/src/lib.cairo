@@ -210,27 +210,31 @@ pub mod VotingContract {
         fn count_votes(self: @ContractState) -> (u256, u256, Candidate) {
             let votes_count = self.total_voters.read();
             let all_candidates = self.get_all_candidates();
-
+        
             let mut i = 0;
-
+        
             let mut winning_candidate = Candidate {
-                id: 0, index: 0, fname: 'fname', lname: 'lname', no_of_votes: 0, qualified: false
+                id: 0, 
+                index: 0, 
+                fname: 'fname', 
+                lname: 'lname', 
+                no_of_votes: 0, 
+                qualified: false
             };
-
+        
             while i < all_candidates.len() {
-                let current_candidate = all_candidates.at(i);
-                let next_candidate = all_candidates.at(i + 1);
-                winning_candidate = *current_candidate;
-                if next_candidate.no_of_votes > current_candidate.no_of_votes
-                && *next_candidate.qualified {
-                    winning_candidate = *next_candidate;
+                let candidate = all_candidates.at(i);
+                if *candidate.qualified && *candidate.no_of_votes > winning_candidate.no_of_votes {
+                    winning_candidate = *candidate;
                 }
-
                 i += 1;
             }
+        
             assert(winning_candidate.qualified, 'Winning Candidate not qualified');
             (votes_count, winning_candidate.no_of_votes, winning_candidate)
         }
+        
+        
         fn end_election(ref self: ContractState) {
             let election_status = self.election_status.read();
             assert(get_caller_address() == self.owner.read(), 'Only owner can change status');
@@ -250,4 +254,40 @@ pub mod VotingContract {
         let id = PoseidonTrait::new().update_with(fname).update_with(lname).finalize();
         id.into()
     }
+
+
+    // fn count_votes(self: @ContractState) -> (u256, u256, Candidate) {
+    //     let votes_count = self.total_voters.read();
+    //     let all_candidates = self.get_all_candidates();
+    
+    //     let mut i = 0;
+    //     let mut winning_candidate = Candidate {
+    //         id: 0, 
+    //         index: 0, 
+    //         fname: 'fname', 
+    //         lname: 'lname', 
+    //         no_of_votes: 0, 
+    //         qualified: false
+    //     };
+    
+    //     let len = all_candidates.len();
+    //     while i < len {
+    //         let current_candidate = all_candidates.at(i);
+            
+    //         // Initialize winning_candidate with the first qualified candidate
+    //         if i == 0 && *current_candidate.qualified {
+    //             winning_candidate = *current_candidate;
+    //         }
+            
+    //         // Compare with current winning candidate
+    //         if *current_candidate.qualified && current_candidate.no_of_votes > winning_candidate.no_of_votes {
+    //             winning_candidate = *current_candidate;
+    //         }
+    
+    //         i += 1;
+    //     }
+        
+    //     assert(winning_candidate.qualified, 'Winning Candidate not qualified');
+    //     (votes_count, winning_candidate.no_of_votes, winning_candidate)
+    // }
 }

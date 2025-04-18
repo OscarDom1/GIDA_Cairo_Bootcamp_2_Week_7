@@ -1,9 +1,9 @@
 import { RefreshIcon } from "./icons"
 import { Pagination } from "./Pagination"
 
-export default function TableControls({togglePopover, candidates}: {
+export default function TableControls({togglePopover, filteredCandidates}: {
     togglePopover: ({targetId}: {targetId: string}) => void,
-    candidates: Record<any, any>[]
+    filteredCandidates: Record<any, any>[]
 }){
     return (
         <div className="flex justify-between items-center mt-5">
@@ -21,7 +21,7 @@ export default function TableControls({togglePopover, candidates}: {
                 </div>
 
                 <div className="">
-                    <Pagination count={candidates?.length} />
+                    <Pagination count={filteredCandidates?.length} />
                 </div>
             </div>
 

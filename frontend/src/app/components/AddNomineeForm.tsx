@@ -1,154 +1,209 @@
-import { FormEvent, FormEventHandler, useMemo, useState } from "react";
-import GenericModal from "./internal/util/GenericModal";
+import { useMemo, useState } from "react";
 import { useAccount, useContract, useContractWrite, useWaitForTransaction } from "@starknet-react/core";
 import { VotingAbi } from "../common/abis/votingAbi";
 import { ContractAddress } from "../common/data";
 import { CallData } from "starknet";
 import Loading from "./internal/util/Loading";
-import { useForm } from 'react-hook-form'
 
 export default function AddNominee() {
-
     const togglePopover = ({ targetId }: { targetId: string }) => {
         const popover = document.getElementById(targetId);
-        // @ts-ignore
-        popover.togglePopover();
         if (popover) {
-          popover.addEventListener("toggle", () => {
-            if (popover.matches(":popover-open")) {
-              document.body.style.overflow = "hidden";
-            } else {
-              document.body.style.overflow = "";
-            }
-          });
+            // @ts-ignore
+            popover.togglePopover();
+            popover.addEventListener("toggle", () => {
+                if (popover.matches(":popover-open")) {
+                    document.body.style.overflow = "hidden";
+                } else {
+                    document.body.style.overflow = "";
+                }
+            });
         }
     };
 
-    const [candidateFirstname, setCandidateFirstName] = useState("")
-    const [candidateLastname, setCandidateLastName] = useState("")
-
-    const { address: user } = useAccount()
+    const { address: user } = useAccount();
 
     const { contract } = useContract({
         abi: VotingAbi,
         address: ContractAddress
-    })
+    });
 
-    const calls = useMemo(() => {
-        const isValid = user && contract && candidateFirstname.length > 0 && candidateLastname.length > 0;
+    //add a single candidate
+    const [candidateFirstname, setCandidateFirstName] = useState("");
+    const [candidateLastname, setCandidateLastName] = useState("");
 
-        if (!isValid) return 
+    const singleCall = useMemo(() => {
+        const isValid = user && contract && candidateFirstname && candidateLastname;
+        if (!isValid) return;
+        return [contract.populate("nominate", CallData.compile([candidateFirstname, candidateLastname]))];
+    }, [user, candidateFirstname, candidateLastname, contract]);
 
-        return [contract.populate("nominate", CallData.compile([candidateFirstname, candidateLastname]))]
-    }, [user, candidateFirstname, candidateLastname, contract])
+    const { writeAsync: writeSingleAsync, data: singleData, isPending: singlePending } = useContractWrite({
+        calls: singleCall
+    });
 
-    const { writeAsync, error, isError: writeIsError, isPending, data } = useContractWrite({
-        calls
-    })
-
-    const { isError: nominationWaitIsError, data: nominationWaitData, isPending: nominationIsPending, isLoading: nominationWaitIsLoading  } = useWaitForTransaction({
-        hash: data?.transaction_hash,
+    const { isLoading: waitSingleLoading, data: singleWaitData } = useWaitForTransaction({
+        hash: singleData?.transaction_hash,
         watch: true
-    })
+    });
 
-    const nominateCandidate = async () => {
-        console.log("Starting the nominate candidate function")
+    const nominateSingleCandidate = async () => {
         try {
-            await writeAsync();
-            togglePopover({ targetId: "transaction-modal" })
+            await writeSingleAsync();
+            togglePopover({ targetId: "transaction-modal" });
         } catch (err) {
-            console.error(err)
+            console.error(err);
         }
-    }
+    };
 
+   //add candidates by batch
+    const [batchCandidates, setBatchCandidates] = useState<{ firstname: string; lastname: string }[]>([]);
+    const [batchFirst, setBatchFirst] = useState("");
+    const [batchLast, setBatchLast] = useState("");
 
-    const LoadingState = ({ message }: { message: any }) => {
-        return (
-            <span>
-                {message}
-                <Loading />
-            </span>
-        )
-    }
+    const addBatchCandidate = () => {
+        if (batchFirst && batchLast) {
+            setBatchCandidates([...batchCandidates, { firstname: batchFirst, lastname: batchLast }]);
+            setBatchFirst("");
+            setBatchLast("");
+        }
+    };
 
-    const buttonContent = () => {
-        if (isPending) {
-            return <LoadingState message={'Sending'} />
-        }
-        if (nominationWaitIsLoading) {
-            return <LoadingState message={'Waiting for Confirmation'} />
-        }
-        if (nominationWaitData && nominationWaitData.isReverted()) {
-            return <LoadingState message={'Transaction Reverted'} />
-        }
-        if (nominationWaitData && nominationWaitData.isRejected()) {
-            return <LoadingState message={'Transaction Rejected'} />
-        }
-        if (nominationWaitData && nominationWaitData.isError()) {
-            return <LoadingState message={'Unexpected error occured'} />
-        }
-        if (nominationWaitData) {
-            return "Transaction Confirmed"
-        }
-        
-        return "Nominate Student"
-    }
+    const batchCalls = useMemo(() => {
+        if (!user || !contract || batchCandidates.length === 0) return;
+        return batchCandidates.map(candidate =>
+            contract.populate("nominate", CallData.compile([candidate.firstname, candidate.lastname]))
+        );
+    }, [user, contract, batchCandidates]);
 
-    return ( 
-        <form 
-            action="" 
-            className="px-16 py-8 border border-gray-200 rounded-lg"
-            // onSubmit={}
-        >
-            
-            <h2 className="text-xl">Add Nominee Form</h2>
+    const { writeAsync: writeBatchAsync, data: batchData, isPending: batchPending } = useContractWrite({
+        calls: batchCalls
+    });
 
-            <div className="mt-5 flex flex-col gap-4 justify-center">
-                <div className="flex flex-col gap-2">
-                    <label htmlFor="" className="">
-                        Candidate FirstName
-                    </label>
-                    <span className="border border-gray-500 rounded-md px-4 py-2">
-                        <input 
+    const { isLoading: waitBatchLoading, data: batchWaitData } = useWaitForTransaction({
+        hash: batchData?.transaction_hash,
+        watch: true
+    });
+
+    const batchNominate = async () => {
+        try {
+            await writeBatchAsync();
+            togglePopover({ targetId: "transaction-modal" });
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const LoadingState = ({ message }: { message: string }) => (
+        <span>
+            {message}
+            <Loading />
+        </span>
+    );
+
+    const renderButtonContent = (isPending: boolean, isLoading: boolean, txData: any) => {
+        if (isPending) return <LoadingState message="Sending" />;
+        if (isLoading) return <LoadingState message="Waiting for Confirmation" />;
+        if (txData?.isReverted?.()) return <LoadingState message="Transaction Reverted" />;
+        if (txData?.isRejected?.()) return <LoadingState message="Transaction Rejected" />;
+        if (txData?.isError?.()) return <LoadingState message="Unexpected Error" />;
+        if (txData) return "Transaction Confirmed";
+        return null;
+    };
+
+    return (
+        <div className="px-16 py-8 border border-gray-200 rounded-lg">
+            <h2 className="text-xl font-bold mb-4">Add Nominee</h2>
+
+            {/* Single Nomination Form */}
+            <form className="mb-10">
+                <h3 className="text-lg font-semibold mb-2">Single Candidate</h3>
+                <div className="flex flex-col gap-4">
+                    <div>
+                        <label>First Name</label>
+                        <input
                             type="text"
-                            className="outline-none"
+                            className="border px-4 py-2 rounded w-full"
                             value={candidateFirstname}
-                            onChange={(e) => {
-                                setCandidateFirstName(e.target.value)
-                            }}
+                            onChange={(e) => setCandidateFirstName(e.target.value)}
                         />
-                    </span>
-                </div>
-                <div className="flex flex-col gap-2">
-                    <label htmlFor="" className="">
-                        Candidate LastName
-                    </label>
-                    <span className="border border-gray-500 rounded-md px-4 py-2">
-                        <input 
+                    </div>
+                    <div>
+                        <label>Last Name</label>
+                        <input
                             type="text"
-                            className="outline-none"
+                            className="border px-4 py-2 rounded w-full"
                             value={candidateLastname}
-                            onChange={(e) => {
-                                setCandidateLastName(e.target.value)
-                            }}
+                            onChange={(e) => setCandidateLastName(e.target.value)}
                         />
-                    </span>
+                    </div>
+                    <button
+                        type="submit"
+                        className="bg-blue-600 text-white py-2 px-4 rounded"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            nominateSingleCandidate();
+                        }}
+                    >
+                        {renderButtonContent(singlePending, waitSingleLoading, singleWaitData) || "Nominate Candidate"}
+                    </button>
                 </div>
-            </div>
+            </form>
 
-            <div className="mt-5 w-[100%] mx-auto">
-                <button 
-                    className="bg-blue-500 text-white px-4 py-2 rounded-md w-full"
-                    type="submit"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        nominateCandidate()
-                    }}
-                >
-                    {buttonContent()}
-                    {/* Add Nominee */}
-                </button>
-            </div>
-        </form>
-    )
+            {/* Batch Nomination Form */}
+            <form>
+                <h3 className="text-lg font-semibold mb-2">Batch Candidates</h3>
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-row gap-2">
+                        <input
+                            type="text"
+                            placeholder="First Name"
+                            className="border px-4 py-2 rounded w-full"
+                            value={batchFirst}
+                            onChange={(e) => setBatchFirst(e.target.value)}
+                        />
+                        <input
+                            type="text"
+                            placeholder="Last Name"
+                            className="border px-4 py-2 rounded w-full"
+                            value={batchLast}
+                            onChange={(e) => setBatchLast(e.target.value)}
+                        />
+                        <button
+                            type="button"
+                            onClick={addBatchCandidate}
+                            className="bg-green-500 text-white px-4 rounded"
+                        >
+                            Add
+                        </button>
+                    </div>
+
+                    {batchCandidates.length > 0 && (
+                        <div className="mt-4">
+                            <h4 className="font-medium mb-2">Candidates List</h4>
+                            <ul className="list-disc pl-5 text-sm">
+                                {batchCandidates.map((c, i) => (
+                                    <li key={i}>
+                                        {c.firstname} {c.lastname}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    <button
+                        type="submit"
+                        className="bg-purple-600 text-white py-2 px-4 rounded mt-4"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            batchNominate();
+                        }}
+                        disabled={batchCandidates.length === 0}
+                    >
+                        {renderButtonContent(batchPending, waitBatchLoading, batchWaitData) || "Batch Nominate"}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
 }

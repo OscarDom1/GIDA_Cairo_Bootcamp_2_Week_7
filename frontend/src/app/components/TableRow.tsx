@@ -24,6 +24,7 @@ export default function TableRow({ candidate, index }: {
         address: ContractAddress
     })
 
+    //cast vote call
     const calls = useMemo(() => {
         const isValid = user && contract;
 
@@ -36,6 +37,24 @@ export default function TableRow({ candidate, index }: {
         calls
     })
 
+    //unvote call
+    const unvoteCalls = useMemo(() => {
+        if (!user || !contract) return;
+        return [contract.populate("uncast_vote", [candidate?.id])];
+    }, [user, contract, candidate?.id]);
+
+    const { writeAsync: unvoteWriteAsync, isPending: isUnvoting, data: unvoteDataRaw } = useContractWrite({ calls: unvoteCalls });
+
+    //disqualify call
+    const disqualifyCalls = useMemo(() => {
+        if (!user || !contract) return;
+        return [contract.populate("disqualify_candidate", [candidate?.id])];
+    }, [user, contract, candidate?.id]);
+    
+    const { writeAsync: disqualifyWriteAsync, isPending: isDisqualifying, data: disqualifyDataRaw } = useContractWrite({
+        calls: disqualifyCalls
+    });
+
     const voteCandidate = async () => {
         console.log("Preparing to vote candidate")
         try {
@@ -45,6 +64,23 @@ export default function TableRow({ candidate, index }: {
         }
     }
 
+    const unvoteCandidate = async () => {
+        try {
+            await unvoteWriteAsync();
+        } catch (err) {
+            console.error("Unvote Error:", err);
+        }
+    };
+
+
+    const disqualifyCandidate = async () => {
+        try {
+            await disqualifyWriteAsync();
+        } catch (err) {
+            console.error("Disqualify Error:", err);
+        }
+    };
+
     const { 
         isLoading: voteIsLoading, 
 
@@ -53,6 +89,17 @@ export default function TableRow({ candidate, index }: {
         hash: data?.transaction_hash,
         watch: true
     })
+
+    const { isLoading: unvoteIsLoading, data: unvoteData } = useWaitForTransaction({
+        hash: unvoteDataRaw?.transaction_hash,
+        watch: true
+    });
+
+    const { isLoading: disqualifyIsLoading, data: disqualifyData } = useWaitForTransaction({
+        hash: disqualifyDataRaw?.transaction_hash,
+        watch: true
+    });
+
 
     const votingButtonContent = () => {
         if (isPending) {
@@ -76,6 +123,27 @@ export default function TableRow({ candidate, index }: {
         
         return "Vote"
     }
+
+    const unvotingButtonContent = () => {
+        if (isUnvoting) return 'Unvoting...';
+        if (unvoteIsLoading) return 'Waiting...';
+        if (unvoteData?.isReverted?.()) return 'Reverted';
+        if (unvoteData?.isRejected?.()) return 'Rejected';
+        if (unvoteData?.isError?.()) return 'Error';
+        if (unvoteData) return 'Confirmed';
+        return 'Unvote';
+    };
+
+    const disqualifyButtonContent = () => {
+        if (isDisqualifying) return 'Disqualifying...';
+        if (disqualifyIsLoading) return 'Waiting...';
+        if (disqualifyData?.isReverted?.()) return 'Reverted';
+        if (disqualifyData?.isRejected?.()) return 'Rejected';
+        if (disqualifyData?.isError?.()) return 'Error';
+        if (disqualifyData) return 'Confirmed';
+        return 'Disqualify';
+    };
+    
 
     return (
         <tr>
@@ -107,16 +175,30 @@ export default function TableRow({ candidate, index }: {
                     <span>&#8593;</span>
                     <span className="font-light" >{votingButtonContent()}</span>
                 </button>
-                <button className="bg-blue-400 disabled:bg-blue-300 rounded-md text-white font-extrabold px-4 py-2 flex items-center gap-1" disabled>
+                <button
+                    className="bg-blue-400 rounded-md text-white font-extrabold px-4 py-2 flex items-center gap-1 disabled:bg-blue-300"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        unvoteCandidate();
+                    }}
+                    disabled={isUnvoting || unvoteIsLoading}
+                >
                     <span>&#8595;</span>
-                    <span className="font-light">Unvote</span>
+                    <span className="font-light">{unvotingButtonContent()}</span>
                 </button>
             </td>
-            {/* <td className="py-4 px-4 capitalize tracking-wider whitespace-nowrap">
-                <button className="bg-red-500 text-white rounded-md px-4 py-2 font-semibold">
-                    Disqualify
-                </button>
-            </td> */}
+            <td className="py-4 px-4 capitalize tracking-wider whitespace-nowrap">
+            <button 
+        className="bg-red-500 text-white rounded-md px-4 py-2 font-semibold disabled:bg-red-300"
+        onClick={(e) => {
+            e.preventDefault();
+            disqualifyCandidate();
+        }}
+        disabled={isDisqualifying || disqualifyIsLoading}
+    >
+        {disqualifyButtonContent()}
+    </button>
+            </td>
         </tr>
     )
 }
